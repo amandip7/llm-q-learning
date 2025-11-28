@@ -1,0 +1,15 @@
+# Core ML dependencies
+torch>=2.0.0
+transformers>=4.30.0
+datasets>=2.14.0
+
+# Training utilities
+accelerate>=0.20.0
+tqdm>=4.65.0
+
+# Math verification
+sympy>=1.12
+
+# Utilities
+numpy>=1.24.0
+
