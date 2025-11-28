@@ -136,7 +136,7 @@ def evaluate_checkpoint(
             model_name=config.model_name,
             device=config.device
         )
-        checkpoint = torch.load(checkpoint_path, map_location=config.device, weights_only=True)
+        checkpoint = torch.load(checkpoint_path, map_location=config.device, weights_only=False)
         # Handle both raw state_dict and wrapped checkpoint formats
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
             trained_model.online_network.load_state_dict(checkpoint["model_state_dict"])
