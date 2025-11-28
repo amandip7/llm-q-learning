@@ -121,6 +121,7 @@ def main():
         config.device = "cpu"
     else:
         print(f"✓ Using CUDA: {torch.cuda.get_device_name(0)}")
+        config.device = "cuda"
 
     method_name = "Q-LEARNING (Double DQN)" if args.method == "qlearning" else "DPO (Direct Preference Optimization)"
 

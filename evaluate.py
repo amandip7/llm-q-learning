@@ -15,7 +15,7 @@ from q_network import QLearningLLM
 def generate_solution(
     model: QLearningLLM,
     question: str,
-    max_new_tokens: int = 1500,
+    max_new_tokens: int = 512,
     temperature: float = 0.7
 ) -> str:
     """
@@ -85,7 +85,8 @@ def evaluate_model(
         total += 1
         
         predictions.append({
-            "question": example.question[:100] + "...",
+            "question": example.question,
+            "generated": generated,
             "expected": example.answer,
             "generated_answer": extracted_answer,
             "correct": is_correct
@@ -158,6 +159,7 @@ def evaluate_checkpoint(
         print("=" * 60)
         for i, pred in enumerate(trained_results["predictions"][:3]):
             print(f"\n{i+1}. {pred['question']}")
+            print(f"   Generated: {pred['generated']}")
             print(f"   Expected: {pred['expected']}")
             print(f"   Got: {pred['generated_answer']}")
             print(f"   Correct: {'✓' if pred['correct'] else '✗'}")
