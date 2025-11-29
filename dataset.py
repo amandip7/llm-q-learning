@@ -36,29 +36,243 @@ def extract_answer_gsm8k(solution: str) -> Optional[str]:
     return None
 
 
+def _introduce_arithmetic_error(solution: str) -> Tuple[str, bool]:
+    """
+    Introduce arithmetic errors in calculations.
+    Returns (modified_solution, was_modified).
+    """
+    # Find patterns like "X + Y = Z" or "X * Y = Z" and corrupt the result
+    patterns = [
+        (r'(\d+)\s*\+\s*(\d+)\s*=\s*(\d+)', lambda m: f"{m.group(1)} + {m.group(2)} = {int(m.group(3)) + random.choice([-1, 1, 2, -2])}"),
+        (r'(\d+)\s*-\s*(\d+)\s*=\s*(\d+)', lambda m: f"{m.group(1)} - {m.group(2)} = {int(m.group(3)) + random.choice([-1, 1, 2, -2])}"),
+        (r'(\d+)\s*\*\s*(\d+)\s*=\s*(\d+)', lambda m: f"{m.group(1)} * {m.group(2)} = {int(int(m.group(3)) * random.choice([0.9, 1.1]))}"),
+        (r'(\d+)\s*×\s*(\d+)\s*=\s*(\d+)', lambda m: f"{m.group(1)} × {m.group(2)} = {int(int(m.group(3)) * random.choice([0.9, 1.1]))}"),
+        (r'(\d+)\s*/\s*(\d+)\s*=\s*(\d+)', lambda m: f"{m.group(1)} / {m.group(2)} = {int(m.group(3)) + random.choice([-1, 1])}"),
+    ]
+
+    for pattern, replacer in patterns:
+        matches = list(re.finditer(pattern, solution))
+        if matches:
+            match = random.choice(matches)
+            new_calc = replacer(match)
+            return solution[:match.start()] + new_calc + solution[match.end():], True
+
+    return solution, False
+
+
+def _introduce_logical_error(question: str, solution: str) -> Tuple[str, bool]:
+    """
+    Introduce logical/reasoning errors by swapping operations or misinterpreting.
+    Returns (modified_solution, was_modified).
+    """
+    modifications = []
+
+    # Swap addition with subtraction
+    if ' + ' in solution and random.random() < 0.5:
+        parts = solution.split(' + ', 1)
+        if len(parts) == 2:
+            modifications.append((' + ', ' - '))
+
+    # Swap multiplication with division
+    if ' * ' in solution or ' × ' in solution:
+        if random.random() < 0.5:
+            modifications.append((' * ', ' / '))
+            modifications.append((' × ', ' / '))
+
+    # Swap "each" interpretation (common GSM8K error)
+    if 'each' in question.lower():
+        if 'divided by' in solution.lower():
+            modifications.append(('divided by', 'multiplied by'))
+        elif 'multiplied by' in solution.lower():
+            modifications.append(('multiplied by', 'divided by'))
+
+    if modifications:
+        old, new = random.choice(modifications)
+        if old in solution:
+            return solution.replace(old, new, 1), True
+
+    return solution, False
+
+
+def _introduce_thought_divergence(solution: str) -> Tuple[str, bool]:
+    """
+    Make the solution diverge partway through with different reasoning.
+    Returns (modified_solution, was_modified).
+    """
+    # Split solution into lines/steps
+    lines = solution.split('\n')
+    if len(lines) < 3:
+        return solution, False
+
+    # Find a point to diverge (not first or last line)
+    diverge_point = random.randint(1, max(1, len(lines) - 2))
+
+    # Keep lines up to diverge point
+    kept_lines = lines[:diverge_point]
+
+    # Generate divergent reasoning
+    divergent_phrases = [
+        "Wait, let me reconsider. Actually, we should",
+        "On second thought, the correct approach is to",
+        "I realize I need to account for",
+        "Let me try a different method:",
+        "Actually, this is simpler than I thought.",
+    ]
+
+    # Create nonsensical but plausible-looking continuation
+    wrong_calculations = [
+        f"So we have {random.randint(10, 100)} items at ${random.randint(1, 50)} each.",
+        f"This gives us {random.randint(50, 500)} total.",
+        f"After {random.choice(['adding', 'subtracting', 'dividing by'])} {random.randint(2, 20)}, we get the answer.",
+        f"The {random.choice(['total', 'remaining', 'final amount'])} is {random.randint(10, 200)}.",
+    ]
+
+    kept_lines.append(random.choice(divergent_phrases))
+    kept_lines.extend(random.sample(wrong_calculations, min(2, len(wrong_calculations))))
+
+    return '\n'.join(kept_lines), True
+
+
+def _introduce_format_error(solution: str, correct_answer: str) -> str:
+    """
+    Occasionally introduce format errors (missing ####, wrong structure).
+    """
+    error_type = random.choice(['missing_hash', 'wrong_format', 'extra_text', 'no_answer'])
+
+    # Remove existing #### answer
+    base_solution = re.sub(r'####\s*(-?[\d,]+)', '', solution).strip()
+    wrong_answer = str(int(correct_answer) + random.randint(-50, 50))
+    if wrong_answer == correct_answer:
+        wrong_answer = str(int(correct_answer) + 10)
+
+    if error_type == 'missing_hash':
+        # Just put the answer without ####
+        return f"{base_solution}\nThe answer is {wrong_answer}"
+    elif error_type == 'wrong_format':
+        # Use different format markers
+        return f"{base_solution}\n**Answer: {wrong_answer}**"
+    elif error_type == 'extra_text':
+        # Put text after the ####
+        return f"{base_solution}\n#### {wrong_answer} dollars"
+    else:  # no_answer
+        # End abruptly without giving final answer
+        return f"{base_solution}\nTherefore, we can calculate..."
+
+
+def _perturb_numbers_throughout(solution: str, correct_answer: str) -> str:
+    """
+    Perturb multiple numbers throughout the solution, not just one.
+    Creates more substantial divergence from correct solution.
+    """
+    # Find all numbers in solution (excluding the final #### answer)
+    answer_match = re.search(r'####\s*(-?[\d,]+)', solution)
+    if answer_match:
+        solution_without_answer = solution[:answer_match.start()]
+    else:
+        solution_without_answer = solution
+
+    numbers = list(re.finditer(r'\b(\d+)\b', solution_without_answer))
+
+    if len(numbers) >= 2:
+        # Perturb 30-50% of numbers
+        num_to_perturb = max(1, len(numbers) // 3)
+        indices_to_perturb = random.sample(range(len(numbers)), min(num_to_perturb, len(numbers)))
+
+        # Sort in reverse order to replace from end to start (preserves indices)
+        indices_to_perturb.sort(reverse=True)
+
+        for idx in indices_to_perturb:
+            match = numbers[idx]
+            old_num = int(match.group(1))
+            # More aggressive perturbation
+            perturbation = random.choice([
+                old_num + random.randint(-5, 5),
+                int(old_num * random.choice([0.5, 0.8, 1.2, 1.5, 2])),
+                old_num + random.randint(1, 20),
+                max(1, old_num - random.randint(1, 10)),
+            ])
+            new_num = str(max(0, perturbation))
+            solution_without_answer = (
+                solution_without_answer[:match.start()] +
+                new_num +
+                solution_without_answer[match.end():]
+            )
+
+    # Generate wrong final answer
+    try:
+        wrong_answer = str(int(correct_answer) + random.choice([-50, -20, -10, 10, 20, 50]))
+    except ValueError:
+        wrong_answer = str(random.randint(1, 100))
+
+    return f"{solution_without_answer}\n#### {wrong_answer}"
+
+
 def create_incorrect_solution(question: str, correct_solution: str, correct_answer: str) -> str:
     """
-    Create a plausibly incorrect solution by perturbing the correct one.
-    This simulates off-policy data with wrong reasoning.
+    Create a plausibly incorrect solution with diverse error types.
+    This simulates off-policy data with various failure modes:
+
+    1. Mathematical/Calculation Errors: Arithmetic mistakes in intermediate steps
+    2. Logical/Reasoning Errors: Wrong operations or misinterpretation
+    3. Thought Divergence: Solution path diverges partway through
+    4. Format Errors: Missing #### or wrong structure (10% chance)
+    5. Number Perturbation: Multiple numbers changed throughout
+
+    Returns a solution string in GSM8K format with #### [wrong_answer] at the end.
     """
-    # Strategy 1: Modify a number in the solution
-    numbers = re.findall(r'\b\d+\b', correct_solution)
-    if numbers and len(numbers) > 1:
-        # Pick a random number to modify (not the final answer)
-        idx = random.randint(0, len(numbers) - 2)
-        old_num = numbers[idx]
-        # Perturb by a small factor
-        new_num = str(int(old_num) + random.choice([-2, -1, 1, 2, 5, 10]))
-        # Replace first occurrence
-        incorrect = correct_solution.replace(old_num, new_num, 1)
-        # Also change the final answer
-        wrong_answer = str(int(correct_answer) + random.randint(-10, 10))
-        incorrect = re.sub(r'####\s*(-?[\d,]+)', f'#### {wrong_answer}', incorrect)
-        return incorrect
-    
-    # Fallback: just change the final answer
-    wrong_answer = str(int(correct_answer) + random.randint(1, 10))
-    return re.sub(r'####\s*(-?[\d,]+)', f'#### {wrong_answer}', correct_solution)
+    # 10% chance of format error (hardest to learn from)
+    if random.random() < 0.10:
+        return _introduce_format_error(correct_solution, correct_answer)
+
+    # Choose primary error type (weighted by realism)
+    error_weights = [
+        ('arithmetic', 0.25),      # Calculation errors
+        ('logical', 0.20),         # Reasoning errors
+        ('divergence', 0.20),      # Path divergence
+        ('perturb_many', 0.35),    # Multiple number changes
+    ]
+
+    rand_val = random.random()
+    cumulative = 0
+    error_type = 'perturb_many'  # default
+    for etype, weight in error_weights:
+        cumulative += weight
+        if rand_val < cumulative:
+            error_type = etype
+            break
+
+    modified_solution = correct_solution
+    was_modified = False
+
+    if error_type == 'arithmetic':
+        modified_solution, was_modified = _introduce_arithmetic_error(correct_solution)
+    elif error_type == 'logical':
+        modified_solution, was_modified = _introduce_logical_error(question, correct_solution)
+    elif error_type == 'divergence':
+        modified_solution, was_modified = _introduce_thought_divergence(correct_solution)
+
+    # If primary error didn't work, fall back to number perturbation
+    if not was_modified or error_type == 'perturb_many':
+        modified_solution = _perturb_numbers_throughout(correct_solution, correct_answer)
+    else:
+        # Still need to change the final answer for other error types
+        try:
+            wrong_answer = str(int(correct_answer) + random.choice([-30, -15, -5, 5, 15, 30]))
+            if wrong_answer == correct_answer:
+                wrong_answer = str(int(correct_answer) + 10)
+        except ValueError:
+            wrong_answer = str(random.randint(1, 100))
+        modified_solution = re.sub(r'####\s*(-?[\d,]+)', f'#### {wrong_answer}', modified_solution)
+
+    # Ensure we have a valid format (unless it's a format error)
+    if '####' not in modified_solution:
+        try:
+            wrong_answer = str(int(correct_answer) + random.randint(-50, 50))
+        except ValueError:
+            wrong_answer = str(random.randint(1, 100))
+        modified_solution = f"{modified_solution}\n#### {wrong_answer}"
+
+    return modified_solution
 
 
 def load_gsm8k_data(
