@@ -1,16 +1,16 @@
 """
 Q-Network implementation for LLM post-training.
-Uses Double DQN with the LLM's logits projected through a Q-value head.
+Uses Double DQN with a learned Q-value head on top of the LLM.
 
 Key Insight:
 - States (s) = sequence of tokens (prefix)
 - Actions (a) = next token from vocabulary
-- Q(s, a) = projection of LLM logits through learned Q-head
+- Q(s, a) = learned projection from LLM hidden states to Q-values
 - Next state s' = s + a (prefix concatenated with action)
 
 Architecture:
-- LLM produces logits (vocab_size)
-- Q-value projection layer: Linear(vocab_size -> vocab_size)
+- LLM produces hidden states (hidden_size)
+- Q-value projection layer: Linear(hidden_size -> vocab_size)
 - Initialized with small random weights (std=0.01) for near-zero initial Q-values
 """
 import torch
@@ -23,31 +23,31 @@ import copy
 
 class QValueHead(nn.Module):
     """
-    Learnable projection layer that maps LLM logits to Q-values.
+    Learnable projection layer that maps LLM hidden states to Q-values.
     Initialized with small random weights so initial Q-values are near zero,
     analogous to standard Q-function initialization in RL.
     """
 
-    def __init__(self, vocab_size: int, init_std: float = 0.01):
+    def __init__(self, hidden_size: int, vocab_size: int, init_std: float = 0.01):
         super().__init__()
-        self.projection = nn.Linear(vocab_size, vocab_size)
+        self.projection = nn.Linear(hidden_size, vocab_size)
 
         # Initialize with small random weights for near-zero initial Q-values
         # (but not exactly zero to preserve gradient flow)
         nn.init.normal_(self.projection.weight, mean=0.0, std=init_std)
         nn.init.zeros_(self.projection.bias)
 
-    def forward(self, logits: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
-        Project LLM logits to Q-values.
+        Project LLM hidden states to Q-values.
 
         Args:
-            logits: [batch_size, seq_length, vocab_size] from LLM
+            hidden_states: [batch_size, seq_length, hidden_size] from LLM
 
         Returns:
             q_values: [batch_size, seq_length, vocab_size]
         """
-        return self.projection(logits)
+        return self.projection(hidden_states)
 
 
 class QLearningLLM(nn.Module):
@@ -89,12 +89,14 @@ class QLearningLLM(nn.Module):
             param.requires_grad = False
 
         self.vocab_size = self.online_network.config.vocab_size
+        self.hidden_size = self.online_network.config.hidden_size
 
         # Q-value projection heads (one for online, one for target)
-        self.online_q_head = QValueHead(self.vocab_size, init_std=q_head_init_std)
+        # Maps hidden_size -> vocab_size (much smaller than vocab_size -> vocab_size)
+        self.online_q_head = QValueHead(self.hidden_size, self.vocab_size, init_std=q_head_init_std)
         self.online_q_head.to(self.device)
 
-        self.target_q_head = QValueHead(self.vocab_size, init_std=q_head_init_std)
+        self.target_q_head = QValueHead(self.hidden_size, self.vocab_size, init_std=q_head_init_std)
         self.target_q_head.to(self.device)
         self.target_q_head.eval()
 
@@ -114,7 +116,7 @@ class QLearningLLM(nn.Module):
         """
         Get Q-values for all possible next tokens.
 
-        Architecture: LLM → logits → QValueHead → Q-values
+        Architecture: LLM → hidden_states → QValueHead → Q-values
 
         Args:
             input_ids: [batch_size, seq_length]
@@ -132,11 +134,12 @@ class QLearningLLM(nn.Module):
             outputs = network(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                output_hidden_states=True,
                 return_dict=True
             )
-            # Project LLM logits through Q-value head
-            logits = outputs.logits
-            q_values = q_head(logits)
+            # Get final layer hidden states and project through Q-value head
+            hidden_states = outputs.hidden_states[-1]  # [batch, seq, hidden_size]
+            q_values = q_head(hidden_states)
             return q_values
     
     def get_action_q_values(
