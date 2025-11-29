@@ -112,7 +112,8 @@ def train_step(
     # Backward pass
     optimizer.zero_grad()
     loss.backward()
-    torch.nn.utils.clip_grad_norm_(model.online_network.parameters(), 1.0)
+    # Clip gradients for both LLM and Q-head parameters
+    torch.nn.utils.clip_grad_norm_(model.get_trainable_parameters(), 1.0)
     optimizer.step()
     
     # Soft update target network
@@ -159,9 +160,9 @@ def train(config: Config):
         collate_fn=collate_fn
     )
     
-    # Optimizer
+    # Optimizer - includes both LLM and Q-value head parameters
     optimizer = AdamW(
-        model.online_network.parameters(),
+        model.get_trainable_parameters(),
         lr=config.learning_rate
     )
     
@@ -193,18 +194,21 @@ def train(config: Config):
         avg_loss = epoch_loss / len(train_loader)
         print(f"Epoch {epoch + 1} average loss: {avg_loss:.4f}")
         
-        # Save checkpoint
+        # Save checkpoint (includes both LLM and Q-head)
         checkpoint_path = os.path.join(config.output_dir, f"checkpoint_epoch_{epoch + 1}.pt")
         torch.save({
             "epoch": epoch + 1,
             "model_state_dict": model.online_network.state_dict(),
+            "q_head_state_dict": model.online_q_head.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "config": config
         }, checkpoint_path)
-    
-    # Save final model and metrics
-    torch.save(model.online_network.state_dict(), 
-               os.path.join(config.output_dir, "final_model.pt"))
+
+    # Save final model and metrics (includes both LLM and Q-head)
+    torch.save({
+        "model_state_dict": model.online_network.state_dict(),
+        "q_head_state_dict": model.online_q_head.state_dict()
+    }, os.path.join(config.output_dir, "final_model.pt"))
     
     with open(os.path.join(config.output_dir, "metrics.json"), "w") as f:
         json.dump(metrics_history, f)

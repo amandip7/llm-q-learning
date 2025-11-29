@@ -141,6 +141,10 @@ def evaluate_checkpoint(
         # Handle both raw state_dict and wrapped checkpoint formats
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
             trained_model.online_network.load_state_dict(checkpoint["model_state_dict"])
+            # Load Q-head if present (new architecture)
+            if "q_head_state_dict" in checkpoint:
+                trained_model.online_q_head.load_state_dict(checkpoint["q_head_state_dict"])
+                print("   Loaded Q-value projection head")
         else:
             trained_model.online_network.load_state_dict(checkpoint)
 
@@ -153,16 +157,27 @@ def evaluate_checkpoint(
         print("=" * 60)
         print(f"Trained model: {trained_results['correct']}/{trained_results['total']} = {trained_results['accuracy']:.2%}")
 
-        # Show sample predictions
+        # Show detailed example predictions (2-3 complete examples)
         print("\n" + "=" * 60)
-        print("SAMPLE PREDICTIONS (Trained Model)")
+        print("DETAILED EXAMPLE PREDICTIONS")
         print("=" * 60)
         for i, pred in enumerate(trained_results["predictions"][:3]):
-            print(f"\n{i+1}. {pred['question']}")
-            print(f"   Generated: {pred['generated']}")
-            print(f"   Expected: {pred['expected']}")
-            print(f"   Got: {pred['generated_answer']}")
-            print(f"   Correct: {'✓' if pred['correct'] else '✗'}")
+            print(f"\n{'='*60}")
+            print(f"EXAMPLE {i+1}")
+            print("="*60)
+            print(f"\n📝 QUESTION:")
+            print("-"*40)
+            print(pred['question'])
+            print()
+            print(f"🤖 GENERATED SOLUTION:")
+            print("-"*40)
+            print(pred['generated'])
+            print()
+            print(f"📊 ANSWER ANALYSIS:")
+            print("-"*40)
+            print(f"   Extracted Answer: {pred['generated_answer'] if pred['generated_answer'] else '(Could not parse)'}")
+            print(f"   Ground Truth:     {pred['expected']}")
+            print(f"   Result:           {'✓ CORRECT' if pred['correct'] else '✗ INCORRECT'}")
     else:
         print("\nNo checkpoint provided.")
         print("Run training first, then evaluate with:")
