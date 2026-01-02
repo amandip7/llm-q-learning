@@ -133,32 +133,6 @@ def _introduce_thought_divergence(solution: str) -> Tuple[str, bool]:
     return '\n'.join(kept_lines), True
 
 
-def _introduce_format_error(solution: str, correct_answer: str) -> str:
-    """
-    Occasionally introduce format errors (missing ####, wrong structure).
-    """
-    error_type = random.choice(['missing_hash', 'wrong_format', 'extra_text', 'no_answer'])
-
-    # Remove existing #### answer
-    base_solution = re.sub(r'####\s*(-?[\d,]+)', '', solution).strip()
-    wrong_answer = str(int(correct_answer) + random.randint(-50, 50))
-    if wrong_answer == correct_answer:
-        wrong_answer = str(int(correct_answer) + 10)
-
-    if error_type == 'missing_hash':
-        # Just put the answer without ####
-        return f"{base_solution}\nThe answer is {wrong_answer}"
-    elif error_type == 'wrong_format':
-        # Use different format markers
-        return f"{base_solution}\n**Answer: {wrong_answer}**"
-    elif error_type == 'extra_text':
-        # Put text after the ####
-        return f"{base_solution}\n#### {wrong_answer} dollars"
-    else:  # no_answer
-        # End abruptly without giving final answer
-        return f"{base_solution}\nTherefore, we can calculate..."
-
-
 def _perturb_numbers_throughout(solution: str, correct_answer: str) -> str:
     """
     Perturb multiple numbers throughout the solution, not just one.
@@ -219,11 +193,8 @@ def create_incorrect_solution(question: str, correct_solution: str, correct_answ
     5. Number Perturbation: Multiple numbers changed throughout
 
     Returns a solution string in GSM8K format with #### [wrong_answer] at the end.
+    (Note: 50% of samples will also have format errors added at the end)
     """
-    # 10% chance of format error (hardest to learn from)
-    if random.random() < 0.10:
-        return _introduce_format_error(correct_solution, correct_answer)
-
     # Choose primary error type (weighted by realism)
     error_weights = [
         ('arithmetic', 0.25),      # Calculation errors
@@ -264,7 +235,7 @@ def create_incorrect_solution(question: str, correct_solution: str, correct_answ
             wrong_answer = str(random.randint(1, 100))
         modified_solution = re.sub(r'####\s*(-?[\d,]+)', f'#### {wrong_answer}', modified_solution)
 
-    # Ensure we have a valid format (unless it's a format error)
+    # Ensure we have a valid format before potentially corrupting it
     if '####' not in modified_solution:
         try:
             wrong_answer = str(int(correct_answer) + random.randint(-50, 50))
@@ -272,7 +243,50 @@ def create_incorrect_solution(question: str, correct_solution: str, correct_answ
             wrong_answer = str(random.randint(1, 100))
         modified_solution = f"{modified_solution}\n#### {wrong_answer}"
 
+    # 50% chance to also add format error (misplace or remove ####)
+    if random.random() < 0.50:
+        modified_solution = _corrupt_answer_format(modified_solution)
+
     return modified_solution
+
+
+def _corrupt_answer_format(solution: str) -> str:
+    """
+    Corrupt the #### format by moving it or removing it.
+    Assumes solution already has #### somewhere.
+    """
+    # Extract the answer number
+    match = re.search(r'####\s*(-?[\d,]+)', solution)
+    if not match:
+        return solution
+
+    answer = match.group(1)
+    # Remove the existing #### answer
+    base_solution = re.sub(r'\n?####\s*(-?[\d,]+)', '', solution).strip()
+
+    error_type = random.choice(['start', 'middle', 'remove', 'no_hash', 'text_after'])
+
+    if error_type == 'start':
+        # Put #### at the very start
+        return f"#### {answer}\n{base_solution}"
+    elif error_type == 'middle':
+        # Put #### somewhere in the middle
+        lines = base_solution.split('\n')
+        if len(lines) > 2:
+            insert_pos = random.randint(1, len(lines) - 1)
+            lines.insert(insert_pos, f"#### {answer}")
+            return '\n'.join(lines)
+        else:
+            return f"{base_solution}\n#### {answer}"  # fallback to normal
+    elif error_type == 'remove':
+        # Remove #### entirely, just end with the solution
+        return base_solution
+    elif error_type == 'no_hash':
+        # Put answer without #### marker
+        return f"{base_solution}\nThe answer is {answer}"
+    else:  # text_after
+        # Put extra text after the answer number
+        return f"{base_solution}\n#### {answer} dollars total"
 
 
 def load_gsm8k_data(
