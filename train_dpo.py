@@ -189,7 +189,7 @@ def train_dpo(config: Config):
     """Main DPO training loop."""
     print(f"Starting DPO training...")
     print(f"Model: {config.model_name}")
-    print(f"Beta (KL penalty): 0.1")
+    print(f"Beta (KL penalty): {config.beta}")
 
     # Create output directory
     os.makedirs(config.output_dir, exist_ok=True)
@@ -198,7 +198,7 @@ def train_dpo(config: Config):
     trainer = DPOTrainer(
         model_name=config.model_name,
         device=config.device,
-        beta=0.1
+        beta=config.beta
     )
     print(f"Model loaded on {trainer.device}")
 

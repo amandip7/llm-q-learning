@@ -15,6 +15,9 @@ class Config:
     gamma: float = 0.99  # Discount factor
     tau: float = 0.005  # Soft update rate for target network
     learning_rate: float = 1e-5
+
+    # DPO hyperparameters
+    beta: float = 0.1  # KL penalty coefficient
     
     # Training settings
     batch_size: int = 4
@@ -30,7 +33,7 @@ class Config:
     # "uniform" = spread reward equally across all tokens
     # "exponential" = weight more toward final tokens (outcome-based)
     # "heuristic" = try to localize rewards to specific tokens
-    reward_distribution: str = "exponential"
+    reward_distribution: str = "uniform"
     reward_decay: float = 0.9  # For exponential distribution
     
     # Dataset settings

@@ -264,7 +264,7 @@ def _corrupt_answer_format(solution: str) -> str:
     # Remove the existing #### answer
     base_solution = re.sub(r'\n?####\s*(-?[\d,]+)', '', solution).strip()
 
-    error_type = random.choice(['start', 'middle', 'remove', 'no_hash', 'text_after'])
+    error_type = random.choice(['start', 'middle', 'remove', 'no_hash'])
 
     if error_type == 'start':
         # Put #### at the very start
@@ -284,9 +284,6 @@ def _corrupt_answer_format(solution: str) -> str:
     elif error_type == 'no_hash':
         # Put answer without #### marker
         return f"{base_solution}\nThe answer is {answer}"
-    else:  # text_after
-        # Put extra text after the answer number
-        return f"{base_solution}\n#### {answer} dollars total"
 
 
 def load_gsm8k_data(
