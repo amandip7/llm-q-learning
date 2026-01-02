@@ -130,13 +130,13 @@ def evaluate_checkpoint(
     )
     print(f"Loaded {len(test_dataset)} test examples")
     
-    # Load trained model if checkpoint provided
+    
+    trained_model = QLearningLLM(
+        model_name=config.model_name,
+        device=config.device
+    )
     if checkpoint_path:
         print(f"\n3. Loading trained model from {checkpoint_path}...")
-        trained_model = QLearningLLM(
-            model_name=config.model_name,
-            device=config.device
-        )
         checkpoint = torch.load(checkpoint_path, map_location=config.device, weights_only=False)
         # Handle both raw state_dict and wrapped checkpoint formats
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
@@ -147,41 +147,39 @@ def evaluate_checkpoint(
                 print("   Loaded Q-value projection head")
         else:
             trained_model.online_network.load_state_dict(checkpoint)
-
-        print("\n4. Evaluating trained model...")
-        trained_results = evaluate_model(trained_model, test_dataset, num_samples=50)
-        print(f"Trained model accuracy: {trained_results['accuracy']:.2%}")
-
-        print("\n" + "=" * 60)
-        print("RESULTS SUMMARY")
-        print("=" * 60)
-        print(f"Trained model: {trained_results['correct']}/{trained_results['total']} = {trained_results['accuracy']:.2%}")
-
-        # Show detailed example predictions (2-3 complete examples)
-        print("\n" + "=" * 60)
-        print("DETAILED EXAMPLE PREDICTIONS")
-        print("=" * 60)
-        for i, pred in enumerate(trained_results["predictions"][:3]):
-            print(f"\n{'='*60}")
-            print(f"EXAMPLE {i+1}")
-            print("="*60)
-            print(f"\n📝 QUESTION:")
-            print("-"*40)
-            print(pred['question'])
-            print()
-            print(f"🤖 GENERATED SOLUTION:")
-            print("-"*40)
-            print(pred['generated'])
-            print()
-            print(f"📊 ANSWER ANALYSIS:")
-            print("-"*40)
-            print(f"   Extracted Answer: {pred['generated_answer'] if pred['generated_answer'] else '(Could not parse)'}")
-            print(f"   Ground Truth:     {pred['expected']}")
-            print(f"   Result:           {'✓ CORRECT' if pred['correct'] else '✗ INCORRECT'}")
     else:
-        print("\nNo checkpoint provided.")
-        print("Run training first, then evaluate with:")
-        print("  python evaluate.py --checkpoint outputs/final_model.pt")
+        print(f"No checkpoint provided, working with base model")
+
+    print("\n4. Evaluating trained model...")
+    trained_results = evaluate_model(trained_model, test_dataset, num_samples=config.max_eval_samples)
+    print(f"Trained model accuracy: {trained_results['accuracy']:.2%}")
+
+    print("\n" + "=" * 60)
+    print("RESULTS SUMMARY")
+    print("=" * 60)
+    print(f"Trained model: {trained_results['correct']}/{trained_results['total']} = {trained_results['accuracy']:.2%}")
+
+    # Show detailed example predictions (2-3 complete examples)
+    print("\n" + "=" * 60)
+    print("DETAILED EXAMPLE PREDICTIONS")
+    print("=" * 60)
+    for i, pred in enumerate(trained_results["predictions"][:3]):
+        print(f"\n{'='*60}")
+        print(f"EXAMPLE {i+1}")
+        print("="*60)
+        print(f"\n📝 QUESTION:")
+        print("-"*40)
+        print(pred['question'])
+        print()
+        print(f"🤖 GENERATED SOLUTION:")
+        print("-"*40)
+        print(pred['generated'])
+        print()
+        print(f"📊 ANSWER ANALYSIS:")
+        print("-"*40)
+        print(f"   Extracted Answer: {pred['generated_answer'] if pred['generated_answer'] else '(Could not parse)'}")
+        print(f"   Ground Truth:     {pred['expected']}")
+        print(f"   Result:           {'✓ CORRECT' if pred['correct'] else '✗ INCORRECT'}")
 
 
 if __name__ == "__main__":

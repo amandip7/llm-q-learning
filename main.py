@@ -156,11 +156,7 @@ def main():
             args.checkpoint = f"{config.output_dir}/{checkpoint_name}"
 
     if args.mode in ["eval", "both"]:
-        if args.checkpoint is None and args.mode == "eval":
-            print("⚠ No checkpoint provided for evaluation.")
-            print("  Run with --mode train first, or provide --checkpoint")
-        else:
-            evaluate_checkpoint(config, args.checkpoint)
+        evaluate_checkpoint(config, args.checkpoint)
 
 
 if __name__ == "__main__":

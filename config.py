@@ -36,7 +36,7 @@ class Config:
     # Dataset settings
     dataset_name: str = "gsm8k"  # Grade school math
     max_train_samples: Optional[int] = 1000  # Limit for POC
-    max_eval_samples: Optional[int] = 100
+    max_eval_samples: Optional[int] = 50
     
     # Device
     device: str = "cuda"  # Will fallback to CPU if unavailable
