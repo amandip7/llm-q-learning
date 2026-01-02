@@ -312,6 +312,7 @@ def load_gsm8k_data(
 
         question = item["question"]
         solution = item["answer"]
+        clean_solution = re.sub(r"<<.*?>>", "", solution)
         answer = extract_answer_gsm8k(solution)
 
         if answer is None:
@@ -322,7 +323,7 @@ def load_gsm8k_data(
         # Add correct example
         examples.append(MathExample(
             question=question,
-            solution=solution,
+            solution=clean_solution,
             answer=answer,
             is_correct=True
         ))
@@ -333,9 +334,10 @@ def load_gsm8k_data(
         # 2. DPO has exactly one preference pair per question
         if include_incorrect and split == "train":
             incorrect_solution = create_incorrect_solution(question, solution, answer)
+            clean_incorrect_solution = re.sub(r"<<.*?>>", "", incorrect_solution)
             examples.append(MathExample(
                 question=question,
-                solution=incorrect_solution,
+                solution=clean_incorrect_solution,
                 answer=answer,  # Keep original answer for verification
                 is_correct=False
             ))

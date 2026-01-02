@@ -18,7 +18,7 @@ class Config:
     
     # Training settings
     batch_size: int = 4
-    max_seq_length: int = 256
+    max_seq_length: int = 2048
     num_epochs: int = 3
     gradient_accumulation_steps: int = 4
     
