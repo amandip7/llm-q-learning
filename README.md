@@ -208,20 +208,3 @@ This implementation is designed for ablation studies comparing:
 
 Both methods use the **exact same dataset** (same random seed) for fair comparison.
 
-## License
-
-MIT License
-
-## Citation
-
-If you use this code in your research, please cite:
-
-```bibtex
-@misc{qlearning_llm,
-  title={Q-Learning for LLM Post-Training: A Proof of Concept},
-  year={2024},
-  publisher={GitHub},
-  url={https://github.com/your-repo/llm_q_learning}
-}
-```
-
