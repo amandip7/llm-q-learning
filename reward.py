@@ -133,7 +133,7 @@ def compute_token_rewards(
     is_correct: bool,
     prompt_length: int,
     tokenizer=None,
-    method: str = "exponential",
+    method: str = "uniform",
     correct_reward: float = 1.0,
     incorrect_reward: float = -1.0,
     decay: float = 0.9
